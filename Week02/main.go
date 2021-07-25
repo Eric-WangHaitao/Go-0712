@@ -2,7 +2,7 @@ package main
 
 import (
    "fmt"
-   "github.com/Eric-WangHaitao/Go-0712/dao"
+   "github.com/Eric-WangHaitao/Go-0712/Week02/dao"
 )
 
 func main() {
