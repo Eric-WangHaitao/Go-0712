@@ -1,8 +1,9 @@
 package dao
 
 import (
-	"fmt"
 	"database/sql"
+	"fmt"
+	_ "github.com/go-sql-driver/mysql"
 	"github.com/pkg/errors"
 )
 
@@ -26,7 +27,7 @@ func QueryUserById(id string) (User, error) {
 	row := Db.QueryRow("select id ,name from user where id = ?", id)
 	err := row.Scan(&user.Id, &user.Name)
 	if err != nil {
-		return user, errors.Wrapf(sql.ErrNoRows, fmt.Sprintf("sql: %s error: %v", sql, err))
+		return user, errors.Wrapf(sql.ErrNoRows, fmt.Sprintf("sql error: %v", err))
 	}
 	return user, nil
 }
