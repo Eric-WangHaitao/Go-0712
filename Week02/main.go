@@ -14,7 +14,7 @@ func main() {
 	if errors.Is(err, sql.ErrNoRows) {
 		fmt.Printf("data not found, %v\n", err)
 		return
-    }
+	}
 
 	if err != nil {
 		// unknown error
