@@ -1,6 +1,7 @@
 package dao
 
 import (
+	"fmt"
 	"database/sql"
 	"github.com/pkg/errors"
 )
@@ -25,7 +26,7 @@ func QueryUserById(id string) (User, error) {
 	row := Db.QueryRow("select id ,name from user where id = ?", id)
 	err := row.Scan(&user.Id, &user.Name)
 	if err != nil {
-		return user, errors.Wrap(err, "QueryUserById err")
+		return user, errors.Wrapf(sql.ErrNoRows, fmt.Sprintf("sql: %s error: %v", sql, err))
 	}
 	return user, nil
 }
