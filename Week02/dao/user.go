@@ -1,9 +1,8 @@
 package dao
 
 import (
-	"database/sql"
 	"fmt"
-	_ "github.com/go-sql-driver/mysql"
+	"database/sql"
 	"github.com/pkg/errors"
 )
 
