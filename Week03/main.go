@@ -1,48 +1,73 @@
 package main
 
 import (
-	"os"
-	"fmt"
-	"time"
-	"errors"
 	"context"
-	"syscall"	
-	"os/signal"
-	"net/http"
+	"fmt"
 	"golang.org/x/sync/errgroup"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 )
 
 var done = make(chan int)
 
 func main() {
 	group, ctx := errgroup.WithContext(context.Background())
-	
-	//http server
-	svr := http.NewServer()
 	group.Go(func() error {
-		fmt.Println("http server start！")
+		mux := http.NewServeMux()
+		mux.HandleFunc("/close", func(writer http.ResponseWriter, request *http.Request) {
+			done <- 1
+		})
+		s := NewServer(":8080", mux)
 		go func() {
 			<-ctx.Done()
-			fmt.Println("http ctx done！")
-			svr.Shutdown(context.TODO())
+			fmt.Println("http ctx done")
+			s.Stop()
 		}()
-		return svr.Start()
+		return s.Start()
 	})
-
-	//Signal
 	group.Go(func() error {
-		quit := make(chan os.Signal)
-		signal.Notify(quit, syscall.SIGKILL, syscall.SIGQUIT, syscall.SIGINT, syscall.SIGTERM)
+		sig := make(chan os.Signal)
+		signal.Notify(sig, syscall.SIGKILL, syscall.SIGQUIT, syscall.SIGINT, syscall.SIGTERM)
 		select {
 		case <-ctx.Done():
 			fmt.Println("signal ctx done！")
 			return ctx.Err()
 		case <-sig:
 			fmt.Println("receive signal！")
-			return nil	
+			return nil
 		}
 	})
 
 	err := group.Wait()
 	fmt.Println(err)
+}
+
+//http服务
+type httpServer struct {
+	s       *http.Server
+	handler http.Handler
+	cxt     context.Context
+}
+
+func NewServer(address string, mux http.Handler) *httpServer {
+	h := &httpServer{cxt: context.Background()}
+	h.s = &http.Server{
+		Addr:         address,
+		WriteTimeout: time.Second * 3,
+		Handler:      mux,
+	}
+	return h
+}
+
+func (h *httpServer) Start() error {
+	fmt.Println("httpServer start")
+	return h.s.ListenAndServe()
+}
+
+func (h *httpServer) Stop() error {
+	_ = h.s.Shutdown(h.cxt)
+	return fmt.Errorf("httpServer stop")
 }
