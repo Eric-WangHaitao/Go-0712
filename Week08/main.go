@@ -1,105 +1,82 @@
-package work
+package main
 
 import (
-	"container/list"
-	"log"
-	"sync"
-	"time"
+	"context"
+	"fmt"
+	"github.com/go-redis/redis/v8"
+	"github.com/hhxsv5/go-redis-memory-analysis"
 )
+
+var client redis.UniversalClient
+var ctx context.Context
 
 const (
-	typeSuccess int = 1
-	typeFail    int = 2
+	ip   string = "127.0.0.1"
+	port uint16 = 6380
 )
 
-//指标
-type metrics struct {
-	success int64
-	fail    int64
+func init() {
+	client = redis.NewClient(&redis.Options{
+		Addr:         fmt.Sprintf("%v:%v", ip, port),
+		Password:     "",
+		DB:           0,
+		PoolSize:     128,
+		MinIdleConns: 100,
+		MaxRetries:   5,
+	})
+
+	ctx = context.Background()
 }
 
-//滑动窗口
-type SlidingWindow struct {
-	bucket int                //桶数
-	curKey int64              //当前key
-	m      map[int64]*metrics //统计
-	data   *list.List
-	sync.RWMutex
+func main() {
+	write(10000, "len10_10k", generateValue(10))
+	write(50000, "len10_50k", generateValue(10))
+	write(500000, "len10_500k", generateValue(10))
+
+	write(10000, "len1000_10k", generateValue(1000))
+	write(50000, "len1000_50k", generateValue(1000))
+	write(500000, "len1000_500k", generateValue(1000))
+
+	write(10000, "len5000_10k", generateValue(5000))
+	write(50000, "len5000_50k", generateValue(5000))
+	write(500000, "len5000_500k", generateValue(5000))
+
+	analysis()
 }
 
-//创建滑动窗口
-func NewSlidingWindow(bucket int) *SlidingWindow {
-	sw := &SlidingWindow{}
-	sw.bucket = bucket
-	sw.data = list.New()
-	return sw
-}
-
-//统计成功
-func (sw *SlidingWindow) AddSuccess() {
-	sw.incr(typeSuccess)
-}
-
-//统计失败
-func (sw *SlidingWindow) AddFail() {
-	sw.incr(typeFail)
-}
-
-//自增操作
-func (sw *SlidingWindow) incr(t int) {
-	sw.Lock()
-	defer sw.Unlock()
-	nowTime := time.Now().Unix()
-	if _, ok := sw.m[nowTime]; !ok {
-		sw.m = make(map[int64]*metrics)
-		sw.m[nowTime] = &metrics{}
-	}
-	if sw.curKey == 0 {
-		sw.curKey = nowTime
-	}
-	//一秒一个bucket
-	if sw.curKey != nowTime {
-		sw.data.PushBack(sw.m[nowTime])
-		delete(sw.m,sw.curKey)
-		sw.curKey = nowTime
-		if sw.data.Len() > sw.bucket {
-			for i := 0; i <= sw.data.Len()-sw.bucket; i++ {
-				sw.data.Remove(sw.data.Front())
-			}
+func write(num int, key, value string) {
+	for i := 0; i < num; i++ {
+		k := fmt.Sprintf("%s:%v", key, i)
+		cmd := client.Set(ctx, k, value, -1)
+		err := cmd.Err()
+		if err != nil {
+			fmt.Println(cmd.String())
 		}
 	}
+}
 
-	switch t {
-	case typeSuccess:
-		sw.m[nowTime].success++
-	case typeFail:
-		sw.m[nowTime].fail++
-	default:
-		log.Fatal("err type")
+func analysis() {
+	analysis, err := gorma.NewAnalysisConnection(ip, port, "")
+	if err != nil {
+		fmt.Println("something wrong:", err)
+		return
+	}
+	defer analysis.Close()
+
+	analysis.Start([]string{":"})
+
+	err = analysis.SaveReports("./reports")
+	if err == nil {
+		fmt.Println("done")
+	} else {
+		fmt.Println("error:", err)
 	}
 }
 
-//获取数据长度
-func (sw *SlidingWindow) Len() int {
-	return sw.data.Len()
-}
-
-//获取数据(space 如：5、10秒)
-func (sw *SlidingWindow) Data(space int) []*metrics {
-	sw.RLock()
-	defer sw.RUnlock()
-	var data []*metrics
-	var num = 0
-	var m = &metrics{}
-	for i := sw.data.Front(); i != nil; i = i.Next() {
-		one := i.Value.(*metrics)
-		m.success += one.success
-		m.fail += one.fail
-		if num%space == 0 {
-			data = append(data, m)
-			m = &metrics{} //重置m
-		}
-		num++
+func generateValue(size int) string {
+	arr := make([]byte, size)
+	for i := 0; i < size; i++ {
+		arr[i] = 'a'
 	}
-	return data
+	return string(arr)
 }
